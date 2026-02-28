@@ -1,0 +1,14 @@
+#!/bin/bash
+# Resolve the project root (3 levels above this script: MacOS → Contents → .app → project)
+SCRIPT="$(cd "$(dirname "$0")" && pwd)"
+PROJECT="$(dirname "$(dirname "$(dirname "$SCRIPT")")")"
+
+cd "$PROJECT"
+
+# Use venv python if present, otherwise fall back to system python3
+PYTHON="$PROJECT/venv/bin/python3"
+if [ ! -f "$PYTHON" ]; then
+    PYTHON="$(which python3)"
+fi
+
+exec "$PYTHON" "$PROJECT/src/app.py"

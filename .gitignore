@@ -1,0 +1,9 @@
+venv/
+not useful/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+Product_Rollout_Drafts.docx
+Product_Rollout_Drafts_Academic.docx
+Product_Rollout_Drafts_Final.docx
