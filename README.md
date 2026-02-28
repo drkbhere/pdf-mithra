@@ -4,6 +4,8 @@
 
 Pdf-Mithra is a free desktop app for Mac and Windows that turns your PDF annotations into structured, exportable notes — instantly. Drop in a paper, get back clean notes grouped by section, ready to paste into Obsidian, Notion, Excel, or anywhere else.
 
+![Pdf-Mithra with annotations loaded](screenshots/loaded.png)
+
 ---
 
 ## What it does
@@ -55,6 +57,14 @@ Click any annotation card to jump directly to that page in Preview.
 ## Platforms
 
 Pdf-Mithra runs on **macOS** and **Windows** with the same features.
+
+---
+
+## Screenshots
+
+| Empty state | Annotations loaded |
+|---|---|
+| ![Empty](screenshots/empty.png) | ![Loaded](screenshots/loaded.png) |
 
 ---
 
