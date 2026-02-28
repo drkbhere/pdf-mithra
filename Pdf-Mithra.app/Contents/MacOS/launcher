@@ -9,5 +9,11 @@ if [ ! -f "$PYTHON" ]; then
     PYTHON="$(which python3)"
 fi
 
-# Force arm64 — Python is a universal binary and macOS may pick x86_64 on double-click
-exec arch -arm64 "$PYTHON" "$PROJECT/src/app.py"
+# On Apple Silicon, macOS may launch a universal Python in x86_64 mode via double-click.
+# Force the native architecture to match the venv's compiled packages.
+ARCH="$(uname -m)"
+if [ "$ARCH" = "arm64" ]; then
+    exec arch -arm64 "$PYTHON" "$PROJECT/src/app.py"
+else
+    exec "$PYTHON" "$PROJECT/src/app.py"
+fi
