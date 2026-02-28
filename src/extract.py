@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marginalia — core extraction, formatting, and CLI."""
+"""Pdf-Mithra — core extraction, formatting, and CLI."""
 
 import argparse
 import bisect
@@ -706,7 +706,7 @@ def format_html(
         '<html lang="en">\n<head>\n'
         '<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-        f"<title>{esc(doc_title)} \u2014 Marginalia</title>\n"
+        f"<title>{esc(doc_title)} \u2014 Pdf-Mithra</title>\n"
         f"<style>{css}</style>\n</head>\n<body>\n"
         '<header class="doc-header">\n'
         f'  <div class="doc-title">\U0001f4c4 {esc(filename)}</div>\n'
@@ -751,7 +751,7 @@ def format_batch_markdown(results, with_metadata=True, deep_links=False) -> str:
 # ---------------------------------------------------------------------------
 def main():
     import pyperclip
-    parser = argparse.ArgumentParser(description="Marginalia — extract PDF annotations.")
+    parser = argparse.ArgumentParser(description="Pdf-Mithra — extract PDF annotations.")
     parser.add_argument("pdf", help="Path to the PDF file")
     parser.add_argument("--context",  action="store_true")
     parser.add_argument("--metadata", action="store_true")

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Marginalia — PDF annotation extractor."""
+"""Pdf-Mithra — Friend of PDFs."""
 
 import json
+import os
+import platform
 import re
 import subprocess
 import sys
@@ -9,6 +11,9 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
+
+IS_MAC = platform.system() == "Darwin"
+IS_WIN = platform.system() == "Windows"
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -34,8 +39,8 @@ except ImportError:
     PYNPUT_AVAILABLE = False
 
 # ── Identity ──────────────────────────────────────────────────────────────────
-APP_NAME    = "Marginalia"
-APP_TAGLINE = "Extract your PDF highlights, beautifully."
+APP_NAME    = "Pdf-Mithra"
+APP_TAGLINE = "Your friendly companion for PDF highlights."
 
 # ── Design tokens ─────────────────────────────────────────────────────────────
 BG       = "#F6F5F3"   # warm off-white window background
@@ -48,8 +53,24 @@ TEXT2    = "#6B6560"   # secondary text
 TEXT3    = "#A09891"   # muted / placeholder text
 GREEN    = "#22C55E"   # success feedback
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-_APP_SUPPORT = Path.home() / "Library" / "Application Support" / APP_NAME
+# ── Platform-specific constants ───────────────────────────────────────────────
+if IS_WIN:
+    _APP_SUPPORT = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
+    _FONT_UI     = "Segoe UI"
+    _FONT_HEAD   = "Segoe UI"
+    _FONT_MONO   = "Consolas"
+    _CURSOR_HAND = "hand2"
+    _MOD         = "Control"
+    _MOD_LABEL   = "Ctrl"
+else:
+    _APP_SUPPORT = Path.home() / "Library" / "Application Support" / APP_NAME
+    _FONT_UI     = "SF Pro Text"
+    _FONT_HEAD   = "SF Pro Display"
+    _FONT_MONO   = "SF Mono"
+    _CURSOR_HAND = "pointinghand"
+    _MOD         = "Command"
+    _MOD_LABEL   = "Cmd"
+
 RECENT_FILES_PATH = _APP_SUPPORT / "recent.json"
 MEANINGS_PATH     = _APP_SUPPORT / "color_meanings.json"
 
@@ -96,8 +117,9 @@ class App(tk.Tk):
         self._build_ui()
         self._try_enable_dnd()
 
-        self.createcommand("::tk::mac::OpenDocument", self._mac_open_doc)
-        self.createcommand("::tk::mac::ReopenApplication", self.deiconify)
+        if IS_MAC:
+            self.createcommand("::tk::mac::OpenDocument", self._mac_open_doc)
+            self.createcommand("::tk::mac::ReopenApplication", self.deiconify)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         if len(sys.argv) > 1 and sys.argv[1].lower().endswith(".pdf"):
@@ -110,39 +132,46 @@ class App(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=False)
-        file_menu.add_command(label="Open PDF…", accelerator="Cmd+O", command=self._open_file)
+        _open_viewer_label  = "Open PDF in Preview" if IS_MAC else "Open PDF"
+        _reveal_label       = "Reveal in Finder"    if IS_MAC else "Show in Explorer"
+
+        file_menu.add_command(label="Open PDF…",
+                              accelerator=f"{_MOD_LABEL}+O", command=self._open_file)
         file_menu.add_separator()
         self._recent_menu = tk.Menu(file_menu, tearoff=False)
         file_menu.add_cascade(label="Open Recent", menu=self._recent_menu)
         self._update_recent_menu()
         file_menu.add_separator()
-        file_menu.add_command(label="Save Annotations As…", accelerator="Cmd+S",
-                              command=self._save_as)
+        file_menu.add_command(label="Save Annotations As…",
+                              accelerator=f"{_MOD_LABEL}+S", command=self._save_as)
         file_menu.add_separator()
-        file_menu.add_command(label="Open PDF in Preview", accelerator="Cmd+Shift+O",
+        file_menu.add_command(label=_open_viewer_label,
+                              accelerator=f"{_MOD_LABEL}+Shift+O",
                               command=self._open_in_preview)
-        file_menu.add_command(label="Reveal in Finder", command=self._reveal_in_finder)
+        file_menu.add_command(label=_reveal_label, command=self._reveal_in_finder)
         file_menu.add_separator()
         file_menu.add_command(label="Close PDF", command=self._clear_pdf)
         menubar.add_cascade(label="File", menu=file_menu)
 
         edit_menu = tk.Menu(menubar, tearoff=False)
-        edit_menu.add_command(label="Copy Annotations", accelerator="Cmd+Shift+C",
+        edit_menu.add_command(label="Copy Annotations",
+                              accelerator=f"{_MOD_LABEL}+Shift+C",
                               command=self._copy_to_clipboard)
         menubar.add_cascade(label="Edit", menu=edit_menu)
 
         self.config(menu=menubar)
 
-        for key in ("<Command-o>", "<Command-O>"):
+        for key in (f"<{_MOD}-o>", f"<{_MOD}-O>"):
             self.bind_all(key, lambda e: self._open_file())
-        for key in ("<Command-Shift-c>", "<Command-Shift-C>"):
+        for key in (f"<{_MOD}-Shift-c>", f"<{_MOD}-Shift-C>"):
             self.bind_all(key, lambda e: self._copy_to_clipboard())
-        for key in ("<Command-s>", "<Command-S>"):
+        for key in (f"<{_MOD}-s>", f"<{_MOD}-S>"):
             self.bind_all(key, lambda e: self._save_as())
-        for key in ("<Command-Shift-o>", "<Command-Shift-O>"):
+        for key in (f"<{_MOD}-Shift-o>", f"<{_MOD}-Shift-O>"):
             self.bind_all(key, lambda e: self._open_in_preview())
-        for key in ("<Command-Alt-e>", "<Command-Alt-E>"):
-            self.bind_all(key, lambda e: self._run_hotkey_extraction())
+        if IS_MAC:
+            for key in ("<Command-Alt-e>", "<Command-Alt-E>"):
+                self.bind_all(key, lambda e: self._run_hotkey_extraction())
 
     # =========================================================================
     # Recent files
@@ -224,13 +253,14 @@ class App(tk.Tk):
         lhs = tk.Frame(header, bg=BG)
         lhs.pack(side="left")
         tk.Label(lhs, text=APP_NAME, bg=BG, fg=TEXT,
-                 font=("SF Pro Display", 22, "bold")).pack(anchor="w")
+                 font=(_FONT_HEAD, 22, "bold")).pack(anchor="w")
         tk.Label(lhs, text=APP_TAGLINE, bg=BG, fg=TEXT2,
-                 font=("SF Pro Text", 12)).pack(anchor="w")
+                 font=(_FONT_UI, 12)).pack(anchor="w")
 
         rhs = tk.Frame(header, bg=BG)
         rhs.pack(side="right", anchor="center")
-        self.preview_open_btn = ttk.Button(rhs, text="Open in Preview",
+        _viewer_btn_label = "Open in Preview" if IS_MAC else "Open PDF"
+        self.preview_open_btn = ttk.Button(rhs, text=_viewer_btn_label,
                                            command=self._open_in_preview,
                                            state="disabled")
         self.preview_open_btn.pack(side="right", padx=(6, 0))
@@ -247,7 +277,7 @@ class App(tk.Tk):
             self.drop_frame,
             text="\U0001f4c2  Drop PDFs here  \u00b7  or click to browse",
             bg=SURFACE2, fg=TEXT2,
-            font=("SF Pro Text", 14), cursor="pointinghand",
+            font=(_FONT_UI, 14), cursor=_CURSOR_HAND,
         )
         self.drop_label.pack(expand=True)
 
@@ -261,7 +291,7 @@ class App(tk.Tk):
         filter_bar.pack(fill="x", padx=16, pady=(0, 2))
 
         tk.Label(filter_bar, text="Filter:", bg=BG, fg=TEXT2,
-                 font=("SF Pro Text", 12)).pack(side="left", padx=(0, 6))
+                 font=(_FONT_UI, 12)).pack(side="left", padx=(0, 6))
 
         self.color_var = tk.StringVar(value="All Colors")
         self.color_menu = ttk.Combobox(filter_bar, textvariable=self.color_var,
@@ -288,7 +318,7 @@ class App(tk.Tk):
                    command=self._reset_filters).pack(side="left", padx=(0, 12))
 
         tk.Label(filter_bar, text="Search:", bg=BG, fg=TEXT2,
-                 font=("SF Pro Text", 12)).pack(side="left", padx=(0, 4))
+                 font=(_FONT_UI, 12)).pack(side="left", padx=(0, 4))
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._refresh_display())
         ttk.Entry(filter_bar, textvariable=self.search_var, width=16).pack(
@@ -308,7 +338,7 @@ class App(tk.Tk):
                         command=self._refresh_display).pack(side="left", padx=(0, 10))
 
         tk.Label(opts, text="Format:", bg=BG, fg=TEXT2,
-                 font=("SF Pro Text", 12)).pack(side="left", padx=(0, 4))
+                 font=(_FONT_UI, 12)).pack(side="left", padx=(0, 4))
         fmt_menu = ttk.Combobox(opts, textvariable=self._output_format,
                                 values=OUTPUT_FORMATS, state="readonly", width=20)
         fmt_menu.pack(side="left", padx=(0, 10))
@@ -317,13 +347,14 @@ class App(tk.Tk):
         ttk.Button(opts, text="Color Meanings\u2026",
                    command=self._show_color_settings).pack(side="left", padx=(0, 10))
 
-        if PYNPUT_AVAILABLE:
-            ttk.Checkbutton(opts, text="Global Hotkey (\u2318\u2325E)",
-                            variable=self._hotkey_on,
-                            command=self._toggle_hotkey).pack(side="left")
-        else:
-            tk.Label(opts, text="Global Hotkey: install pynput",
-                     bg=BG, fg=TEXT3, font=("SF Pro Text", 11)).pack(side="left")
+        if IS_MAC:
+            if PYNPUT_AVAILABLE:
+                ttk.Checkbutton(opts, text="Global Hotkey (\u2318\u2325E)",
+                                variable=self._hotkey_on,
+                                command=self._toggle_hotkey).pack(side="left")
+            else:
+                tk.Label(opts, text="Global Hotkey: install pynput",
+                         bg=BG, fg=TEXT3, font=(_FONT_UI, 11)).pack(side="left")
 
         # ── Results area ──────────────────────────────────────────────────────
         # Both frames live in the same grid cell; lift() switches between them.
@@ -358,7 +389,7 @@ class App(tk.Tk):
         self.text_frame.grid(row=0, column=0, sticky="nsew")
 
         self.results = tk.Text(self.text_frame, wrap="word",
-                               font=("SF Mono", 12), state="normal",
+                               font=(_FONT_MONO, 12), state="normal",
                                bg=SURFACE, relief="flat", padx=14, pady=14, fg=TEXT)
         self.results.bind("<Key>",       lambda e: "break")
         self.results.bind("<BackSpace>", lambda e: "break")
