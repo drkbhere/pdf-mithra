@@ -393,8 +393,8 @@ class App(tk.Tk):
                                bg=SURFACE, relief="flat", padx=14, pady=14, fg=TEXT)
         self.results.bind("<Key>",       lambda e: "break")
         self.results.bind("<BackSpace>", lambda e: "break")
-        self.results.bind("<Command-a>", lambda e: None)
-        self.results.bind("<Command-c>", lambda e: None)
+        self.results.bind(f"<{_MOD}-a>", lambda e: None)
+        self.results.bind(f"<{_MOD}-c>", lambda e: None)
         raw_scroll = ttk.Scrollbar(self.text_frame, orient="vertical",
                                    command=self.results.yview)
         self.results.configure(yscrollcommand=raw_scroll.set)
@@ -934,7 +934,7 @@ class App(tk.Tk):
         ttk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(side="right", padx=(4, 0))
         ttk.Button(btn_frame, text="Save", command=_save).pack(side="right")
         dlg.bind("<Escape>",        lambda e: dlg.destroy())
-        dlg.bind("<Command-Return>",lambda e: _save())
+        dlg.bind(f"<{_MOD}-Return>", lambda e: _save())
 
     # =========================================================================
     # Annotation management
@@ -958,9 +958,9 @@ class App(tk.Tk):
 
         ttk.Label(modal,
                   text=f"Page {annotation['page']} \u2014 {annotation['type']}",
-                  font=("SF Pro Text", 13, "bold")).pack(padx=12, pady=(12, 4), anchor="w")
+                  font=(_FONT_UI, 13, "bold")).pack(padx=12, pady=(12, 4), anchor="w")
 
-        txt = tk.Text(modal, wrap="word", font=("SF Pro Text", 13),
+        txt = tk.Text(modal, wrap="word", font=(_FONT_UI, 13),
                       padx=8, pady=8, height=7, relief="flat",
                       highlightbackground="#C7C7CC", highlightthickness=1)
         txt.insert("1.0", annotation["text"])
@@ -980,40 +980,52 @@ class App(tk.Tk):
         ttk.Button(btns, text="Cancel", command=modal.destroy).pack(side="right", padx=(4, 0))
         ttk.Button(btns, text="Save",   command=_save).pack(side="right")
         modal.bind("<Escape>",        lambda e: modal.destroy())
-        modal.bind("<Command-Return>",lambda e: _save())
+        modal.bind(f"<{_MOD}-Return>", lambda e: _save())
 
     # =========================================================================
     # Open in viewer
     # =========================================================================
     def _open_in_preview(self):
-        if self.pdf_path:
+        if not self.pdf_path:
+            return
+        if IS_MAC:
             subprocess.Popen(["open", self.pdf_path],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            os.startfile(self.pdf_path)
 
     def _reveal_in_finder(self):
-        if self.pdf_path:
+        if not self.pdf_path:
+            return
+        if IS_MAC:
             subprocess.Popen(["open", "-R", self.pdf_path],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif IS_WIN:
+            subprocess.Popen(["explorer", "/select,", self.pdf_path],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _open_at_page(self, page_num: int):
         path = self.pdf_path
         if not path:
             return
-        # Use a variable assignment in AppleScript — fully safe for any file path
-        safe_path = path.replace("\\", "\\\\").replace('"', '\\"')
-        script = (
-            'tell application "Preview"\n'
-            f'    set thePath to "{safe_path}"\n'
-            '    activate\n'
-            '    open (POSIX file thePath)\n'
-            '    delay 0.8\n'
-            '    tell front window\n'
-            f'        set current page to page {page_num} of document 1\n'
-            '    end tell\n'
-            'end tell\n'
-        )
-        subprocess.Popen(["osascript", "-e", script],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if IS_MAC:
+            safe_path = path.replace("\\", "\\\\").replace('"', '\\"')
+            script = (
+                'tell application "Preview"\n'
+                f'    set thePath to "{safe_path}"\n'
+                '    activate\n'
+                '    open (POSIX file thePath)\n'
+                '    delay 0.8\n'
+                '    tell front window\n'
+                f'        set current page to page {page_num} of document 1\n'
+                '    end tell\n'
+                'end tell\n'
+            )
+            subprocess.Popen(["osascript", "-e", script],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # Windows/Linux: open in default PDF viewer (page jump not supported)
+            os.startfile(path)
 
     # =========================================================================
     # Export
@@ -1151,6 +1163,8 @@ class App(tk.Tk):
         self._hotkey_listener.start()
 
     def _run_hotkey_extraction(self):
+        if not IS_MAC:
+            return
         script = """
 tell application "Finder"
     set sel to selection as alias list
@@ -1191,13 +1205,15 @@ end tell
                      f" from {Path(pdf_path).name}")
 
     def _notify(self, title: str, message: str):
-        t = title.replace('"', '\\"')
-        m = message.replace('"', '\\"')
-        subprocess.Popen(
-            ["osascript", "-e",
-             f'display notification "{m}" with title "{t}"'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        if IS_MAC:
+            t = title.replace('"', '\\"')
+            m = message.replace('"', '\\"')
+            subprocess.Popen(
+                ["osascript", "-e",
+                 f'display notification "{m}" with title "{t}"'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        # On Windows the status bar provides sufficient feedback; no-op here.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
