@@ -1,16 +1,42 @@
 #!/bin/bash
 SCRIPT="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$(dirname "$(dirname "$(dirname "$SCRIPT")")")"
-
 cd "$PROJECT"
 
-PYTHON="$PROJECT/venv/bin/python3"
-if [ ! -f "$PYTHON" ]; then
-    PYTHON="$(which python3)"
+VENV="$PROJECT/venv"
+PYTHON="$VENV/bin/python3"
+REQS="$PROJECT/requirements.txt"
+
+error_dialog() {
+    osascript -e "display dialog \"$1\" with title \"Pdf-Mithra\" buttons {\"OK\"} default button \"OK\" with icon stop" 2>/dev/null
+}
+
+# Check Python 3 is available on this machine
+if ! command -v python3 &>/dev/null; then
+    error_dialog "Python 3 is not installed.\n\nPlease download it from python.org/downloads and run the installer, then try again."
+    exit 1
 fi
 
-# On Apple Silicon, macOS may launch a universal Python in x86_64 mode via double-click.
-# Force the native architecture to match the venv's compiled packages.
+# If the venv is missing OR its Python fails (e.g. wrong architecture), rebuild it.
+# This handles the case where the venv was copied from an Apple Silicon Mac to an Intel Mac.
+if [ ! -f "$PYTHON" ] || ! "$PYTHON" -c "import sys" 2>/dev/null; then
+    # Remove the broken venv if one exists
+    [ -d "$VENV" ] && rm -rf "$VENV"
+
+    python3 -m venv "$VENV" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        error_dialog "Could not create a Python environment.\n\nPlease make sure Python 3.11 or later is installed from python.org/downloads"
+        exit 1
+    fi
+
+    "$VENV/bin/pip" install -q -r "$REQS" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        error_dialog "Failed to install dependencies.\n\nPlease check your internet connection and try again."
+        exit 1
+    fi
+fi
+
+# On Apple Silicon, force arm64 so macOS doesn't pick the x86_64 slice of a universal Python
 ARCH="$(uname -m)"
 if [ "$ARCH" = "arm64" ]; then
     exec arch -arm64 "$PYTHON" "$PROJECT/src/app.py"
