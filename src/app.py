@@ -73,6 +73,21 @@ else:
 
 RECENT_FILES_PATH = _APP_SUPPORT / "recent.json"
 MEANINGS_PATH     = _APP_SUPPORT / "color_meanings.json"
+PREFS_PATH        = _APP_SUPPORT / "prefs.json"
+
+# Fonts available in the picker (work on both Mac and Windows)
+FONT_CHOICES = [
+    "Georgia",
+    "Times New Roman",
+    "Palatino",
+    "Arial",
+    "Verdana",
+    "Trebuchet MS",
+    "Courier New",
+    _FONT_UI,   # system default for this platform
+]
+DEFAULT_CARD_FONT = _FONT_UI
+DEFAULT_CARD_SIZE = 13
 
 MAX_RECENT = 5
 OUTPUT_FORMATS = [
@@ -105,6 +120,9 @@ class App(tk.Tk):
         self._raw_mode                = False
         self._hotkey_listener         = None
         self._color_meanings: dict    = self._load_meanings()
+        _prefs                        = self._load_prefs()
+        self._card_font: str          = _prefs.get("card_font", DEFAULT_CARD_FONT)
+        self._card_size: int          = _prefs.get("card_size", DEFAULT_CARD_SIZE)
 
         # ── tk vars ───────────────────────────────────────────────────────────
         self._auto_copy     = tk.BooleanVar(value=False)
@@ -239,6 +257,88 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    def _load_prefs(self) -> dict:
+        try:
+            if PREFS_PATH.exists():
+                return json.loads(PREFS_PATH.read_text())
+        except Exception:
+            pass
+        return {}
+
+    def _save_prefs(self):
+        try:
+            PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PREFS_PATH.write_text(json.dumps(
+                {"card_font": self._card_font, "card_size": self._card_size},
+                indent=2
+            ))
+        except Exception:
+            pass
+
+    def _show_font_settings(self):
+        dlg = tk.Toplevel(self)
+        dlg.title("Font Settings")
+        dlg.geometry("340x230")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        pad = {"padx": 16, "pady": 6}
+
+        # Font family
+        tk.Label(dlg, text="Font family", font=(_FONT_UI, 12, "bold"),
+                 anchor="w").pack(fill="x", padx=16, pady=(14, 2))
+        font_var = tk.StringVar(value=self._card_font)
+        choices = sorted(set(FONT_CHOICES))  # deduplicate, keep sorted
+        font_menu = ttk.Combobox(dlg, textvariable=font_var,
+                                 values=choices, width=30)
+        font_menu.pack(padx=16, pady=(0, 8), anchor="w")
+
+        # Font size
+        tk.Label(dlg, text="Font size", font=(_FONT_UI, 12, "bold"),
+                 anchor="w").pack(fill="x", **pad)
+        size_var = tk.IntVar(value=self._card_size)
+        size_spin = ttk.Spinbox(dlg, from_=8, to=24, textvariable=size_var,
+                                width=6, state="readonly")
+        size_spin.pack(padx=16, anchor="w")
+
+        # Live preview label
+        preview_frame = tk.Frame(dlg, bg="#F6F5F3", relief="flat",
+                                 highlightbackground="#E2DDD8", highlightthickness=1)
+        preview_frame.pack(fill="x", padx=16, pady=(10, 4))
+        preview_lbl = tk.Label(preview_frame,
+                               text="The quick brown fox jumps over the lazy dog.",
+                               bg="#F6F5F3", fg="#1C1917", wraplength=280,
+                               font=(self._card_font, self._card_size),
+                               padx=8, pady=6)
+        preview_lbl.pack(fill="x")
+
+        def _update_preview(*_):
+            try:
+                preview_lbl.configure(font=(font_var.get(), size_var.get()))
+            except Exception:
+                pass
+        font_var.trace_add("write", _update_preview)
+        size_var.trace_add("write", _update_preview)
+
+        # Buttons
+        btn_frame = ttk.Frame(dlg)
+        btn_frame.pack(fill="x", padx=16, pady=(4, 12))
+
+        def _save():
+            self._card_font = font_var.get() or DEFAULT_CARD_FONT
+            self._card_size = size_var.get()
+            self._save_prefs()
+            # Update the raw text view font immediately
+            self.results.configure(font=(self._card_font, self._card_size))
+            self._refresh_display()
+            dlg.destroy()
+
+        ttk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(side="right", padx=(4, 0))
+        ttk.Button(btn_frame, text="Apply", command=_save).pack(side="right")
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.bind(f"<{_MOD}-Return>", lambda e: _save())
+
     # =========================================================================
     # UI construction
     # =========================================================================
@@ -346,6 +446,8 @@ class App(tk.Tk):
 
         ttk.Button(opts, text="Color Meanings\u2026",
                    command=self._show_color_settings).pack(side="left", padx=(0, 10))
+        ttk.Button(opts, text="Font\u2026",
+                   command=self._show_font_settings).pack(side="left", padx=(0, 10))
 
         if IS_MAC:
             if PYNPUT_AVAILABLE:
@@ -793,8 +895,10 @@ class App(tk.Tk):
                   ).pack(side="left")
 
         # ── Body ──────────────────────────────────────────────────────────────
+        cf  = self._card_font
+        cs  = self._card_size
         body = tk.Label(card, text=annotation["text"],
-                        font=("SF Pro Text", 13), fg=TEXT,
+                        font=(cf, cs), fg=TEXT,
                         bg=SURFACE, wraplength=640, justify="left",
                         anchor="nw", padx=12, pady=8)
         body.pack(fill="x", anchor="w")
@@ -804,10 +908,10 @@ class App(tk.Tk):
             ctx_wrap = tk.Frame(card, bg=ctx_bg, padx=12, pady=6)
             ctx_wrap.pack(fill="x")
             tk.Label(ctx_wrap, text="Context", bg=ctx_bg, fg=TEXT3,
-                     font=("SF Pro Text", 10, "bold")).pack(anchor="w")
+                     font=(cf, max(cs - 3, 8), "bold")).pack(anchor="w")
             tk.Label(ctx_wrap, text=annotation["context"],
                      bg=ctx_bg, fg=TEXT2,
-                     font=("SF Pro Text", 11, "italic"),
+                     font=(cf, max(cs - 2, 9), "italic"),
                      wraplength=640, justify="left", anchor="w").pack(anchor="w")
 
         # ── Hover / click ─────────────────────────────────────────────────────
